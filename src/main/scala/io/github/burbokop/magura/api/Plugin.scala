@@ -1,5 +1,4 @@
-package org.burbokop.magura.api
-
+package io.github.burbokop.magura.api
 
 import java.util.ServiceLoader
 import scala.jdk.CollectionConverters.{
@@ -20,6 +19,7 @@ object Plugin {
       .asScala
       .toList
 
+
   def loadFromPath(dir: String): List[Plugin] = {
     val moduleFinder = ModuleFinder.of(Paths.get(dir))
     val plugins = moduleFinder.findAll().asScala.map(_.descriptor.name)
@@ -39,4 +39,5 @@ object Plugin {
 
 trait Plugin {
   def init(): Int
+  def name(): String
 }
