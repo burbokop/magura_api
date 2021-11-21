@@ -1,5 +1,4 @@
-import java.io.FileNotFoundException
-import scala.io.Source
+import xerial.sbt.Sonatype.GitHubHosting
 
 name := "magura_api"
 
@@ -7,25 +6,24 @@ version := "0.1"
 
 scalaVersion := "2.13.7"
 
+publishTo := sonatypePublishToBundle.value
+ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
 
 
-publishTo := Some("Sonatype Snapshots Nexus" at "https://oss.sonatype.org/content/repositories/snapshots")
 
+sonatypeProfileName := "io.github.burbokop"
+publishMavenStyle := true
+licenses := Seq("APL2" -> url("http://www.apache.org/licenses/LICENSE-2.0.txt"))
+sonatypeProjectHosting := Some(GitHubHosting("burbokop", "magura_api", "burbokop@gmail.com"))
+homepage := Some(url("https://github.com/burbokop/magura_api"))
 
-credentials += {
-  try {
-    Credentials(
-      "Sonatype Nexus Repository Manager",
-      "io.github.burbokop.magura.api",
-      Source.fromFile(Path.userHome / ".magura_api" / "user").mkString,
-      Source.fromFile(Path.userHome / ".magura_api" / "password").mkString
-    )
-  } catch {
-    case e: FileNotFoundException => {
-      println(s"[warn] Maven publishing unavailable due to an exception: ${e.getMessage}")
-      Credentials("", "", "", "")
-    }
-  }
-}
+scmInfo := Some(
+  ScmInfo(
+    url("https://github.com/burbokop/magura_api"),
+    "scm:git@github.com:burbokop/magura_api.git"
+  )
+)
 
-
+developers := List(
+  Developer(id="burbokop", name="Borys Boiko", email="burbokop@gmail.com", url=url("https://github.com/burbokop"))
+)
