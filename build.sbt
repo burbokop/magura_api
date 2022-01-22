@@ -5,9 +5,9 @@ import scala.io.Source
 
 name := "magura_api"
 
-version := "0.1.3"
+version := "0.1.4"
 
-scalaVersion := "2.13.7"
+scalaVersion := "2.12.2"
 
 ThisBuild / organization := "io.github.burbokop"
 ThisBuild / organizationName := "burbokop"
@@ -53,3 +53,13 @@ credentials += {
     }
   }
 }
+
+
+libraryDependencies += "org.scala-lang" % "scala-compiler" % scalaVersion.value
+libraryDependencies += "org.scala-lang" % "scala-library" % scalaVersion.value
+libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value
+
+libraryDependencies += "com.googlecode.scalascriptengine" %% "scalascriptengine" % "1.3.11"
+
+libraryDependencies += "com.typesafe.play" %% "play-json" % "2.9.2"
+libraryDependencies ++= Seq("org.yaml" % "snakeyaml" % "1.16")
