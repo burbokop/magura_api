@@ -1,40 +1,41 @@
 package io.github.burbokop.magura.repository
 
-import io.github.burbokop.magura.api.Generator.{DefaultOptions, Options}
+import io.github.burbokop.magura.api.Generator.{DefaultOptions, Options, repositoryName}
 import io.github.burbokop.magura.api.{GeneratorDistributor, MaguraFile}
 import io.github.burbokop.magura.models.meta.{RepositoryMetaData, RepositoryVersion}
 import io.github.burbokop.magura.utils.ZipUtils
 import io.github.burbokop.magura.utils.FileUtils./
 
-import java.io.{ByteArrayInputStream, File}
+import java.io.File
 import scala.annotation.tailrec
 
 case class MaguraRepository(
+                             provider: String,
                              user: String,
                              name: String,
-                             branchName: String,
+                             branchName: Option[String],
                              builder: Option[String]
                            )
 
 object MaguraRepository {
   case class Error(message: String) extends Exception(message)
+  case class UndefinedProvider(provider: String) extends Exception(s"undefined provider: $provider")
 
   def fromString(string: String): Either[Throwable, MaguraRepository] = {
-    val parts = string.split('.')
-    if (parts.length == 3) {
-      val parts2 = parts(2).split(':')
-      if (parts2.length == 2) {
-        Right(MaguraRepository(parts(0), parts(1), parts2(0), Some(parts2(1))))
-      } else if(parts2.length == 1) {
-        Right(MaguraRepository(parts(0), parts(1), parts2(0), None))
-      } else {
-        Left(MaguraRepository.Error(s"repo should be {user}.{repo}.{branch(default = master)}:{builder(optional)} but got '$string'"))
-      }
-    } else if(parts.length == 2) {
-      Right(MaguraRepository(parts(0), parts(1), "master", None))
-    } else {
-      Left(MaguraRepository.Error(s"repo should be {user}.{repo}.{branch}:{builder(optional)} but got '$string'"))
-    }
+    val error = MaguraRepository.Error(s"repo should be {provider}:{user}.{repo}.{branch(optional)}:{builder(optional)} but got '$string'")
+    val parts = string.split(':')
+    if(parts.length > 1) {
+      val provider = parts(0)
+      val repo = parts(1)
+      val builder = if (parts.length == 3) Some(parts(2)) else None
+      val repoParts = repo.split('.')
+      if(repoParts.length > 1) {
+        val user = repoParts(0)
+        val repoName = repoParts(1)
+        val branch = if (repoParts.length == 3) Some(repoParts(2)) else None
+        Right(MaguraRepository(provider, user, repoName, branch, builder))
+      } else Left(error)
+    } else Left(error)
   }
 
   val metaFileName = "meta.json"
@@ -45,64 +46,65 @@ object MaguraRepository {
            repository: MaguraRepository,
            cacheFolder: String,
            optionsSet: Set[Options] = Set(new DefaultOptions())
-         )(
-    versionControl: VersionControl
-  ): (GeneratorDistributor, Either[Throwable, RepositoryMetaData]) = {
-    val repoFolder = s"$cacheFolder${/}${repository.user}${/}${repository.name}"
+         ): (GeneratorDistributor, Either[Throwable, RepositoryMetaData]) = {
+    val repoFolder = new File(s"$cacheFolder${/}${repository.user}${/}${repository.name}")
     val metaFile = s"$repoFolder${/}$metaFileName"
 
     def genEntryFolder(repoEntry: String) = s"$repoFolder${/}$repoEntry"
     def genBuildFolder(repoEntry: String, options: Options) = s"$repoFolder${/}build_${options.hashName()}_$repoEntry"
 
-    val branchResult = versionControl.getBranch(repository.user, repository.name, repository.branchName).fold(
-      err => (builderDistributor, Left(err)),
-      branch => {
-      val meta = RepositoryMetaData.fromJsonFileDefault(metaFile)
-      if(meta.currentCommit != branch.commit.sha) {
-        versionControl.downloadRepositoryZip(repository.user, repository.name, repository.branchName)
-          .fold(err => (builderDistributor, Left(MaguraRepository.Error(err.getMessage))), { data =>
-          ZipUtils.unzipToFolder(new ByteArrayInputStream(data), repoFolder).fold(
-            err => (builderDistributor, Left(err)),
-            repoEntry => {
-            val entryFolder = genEntryFolder(repoEntry)
-            val buildPaths: Map[String, Options] =
-              optionsSet.map(options => (genBuildFolder(repoEntry, options), options)).toMap
 
-            println(s"optionsSet: $optionsSet")
-            println(s"entryFolder: $entryFolder")
-            println(s"buildPaths: $buildPaths")
+    val branchResult = builderDistributor.repositoryProvider(repository.provider)
+      .map(repoProvider => {
+        val branchName = repository.branchName.getOrElse(repoProvider.defaultBranchName())
 
-            builderDistributor
-              .proceed(
-                RepositoryMetaData.fromFolder(new File(cacheFolder), metaFileName, 3),
-                entryFolder,
-                buildPaths,
-                repository.builder.map(MaguraFile.fromBuilder)
-              )
-              .fold[(GeneratorDistributor, Either[Throwable, RepositoryMetaData])](
-                err => (builderDistributor, Left(err)),
-                newGeneratorDistributor => {
-                newGeneratorDistributor.lastGeneration.map { generation =>
-                  if(generation.changed) {
-                    (newGeneratorDistributor, meta.withVersion(RepositoryVersion(
-                      branch.commit.sha,
-                      repoEntry,
+        repoProvider.branch(repository.user, repository.name, branchName).fold(
+          err => (builderDistributor, Left(err)),
+          branch => {
+            val meta = RepositoryMetaData.fromJsonFileDefault(metaFile)
+            if(meta.currentCommit != branch.commit.hash) {
+              repoProvider.download(repository.user, repository.name, branchName, repoFolder)
+                .fold(err => (builderDistributor, Left(err)), repoEntry => {
+                  val entryFolder = genEntryFolder(repoEntry)
+                  val buildPaths: Map[String, Options] =
+                    optionsSet.map(options => (genBuildFolder(repoEntry, options), options)).toMap
+
+                  println(s"optionsSet: $optionsSet")
+                  println(s"entryFolder: $entryFolder")
+                  println(s"buildPaths: $buildPaths")
+
+                  builderDistributor
+                    .proceed(
+                      RepositoryMetaData.fromFolder(new File(cacheFolder), metaFileName, 3),
                       entryFolder,
-                      buildPaths.lastOption.map(_._1),
                       buildPaths,
-                      generation.generatorName
-                    )).writeJsonToFile(metaFile, pretty = true))
-                  } else {
-                    (newGeneratorDistributor, Right(meta))
-                  }
-                } getOrElse {
-                  (builderDistributor, Right(meta))
-                }
-              })
+                      repository.builder.map(MaguraFile.fromBuilder)
+                    )
+                    .fold[(GeneratorDistributor, Either[Throwable, RepositoryMetaData])](
+                      err => (builderDistributor, Left(err)),
+                      newGeneratorDistributor => {
+                        newGeneratorDistributor.lastGeneration.map { generation =>
+                          if(generation.changed) {
+                            (newGeneratorDistributor, meta.withVersion(RepositoryVersion(
+                              branch.commit.hash,
+                              repoEntry,
+                              entryFolder,
+                              buildPaths.lastOption.map(_._1),
+                              buildPaths,
+                              generation.generatorName
+                            )).writeJsonToFile(metaFile, pretty = true))
+                          } else {
+                            (newGeneratorDistributor, Right(meta))
+                          }
+                        } getOrElse {
+                          (builderDistributor, Right(meta))
+                        }
+                      })
+                })
+            } else (builderDistributor, Right(meta))
           })
-        })
-      } else (builderDistributor, Right(meta))
-    })
+      }).getOrElse((builderDistributor, Left(UndefinedProvider(repository.provider))))
+
 
 
     branchResult._2.map(meta => {
@@ -151,13 +153,11 @@ object MaguraRepository {
            builderDistributor: GeneratorDistributor,
            repos: List[MaguraRepository],
            cacheFolder: String,
-         )(
-    versionControl: VersionControl
-  ): (GeneratorDistributor, Either[Throwable, List[RepositoryMetaData]]) = {
+         ): (GeneratorDistributor, Either[Throwable, List[RepositoryMetaData]]) = {
     @tailrec
     def iterator(currentDistributor: GeneratorDistributor, repos: List[MaguraRepository], acc: List[RepositoryMetaData]): (GeneratorDistributor, Either[Throwable, List[RepositoryMetaData]]) = {
       if(repos.length > 0) {
-        val getRes = MaguraRepository.get(builderDistributor, repos.head, cacheFolder)(versionControl)
+        val getRes = MaguraRepository.get(builderDistributor, repos.head, cacheFolder)
         getRes._2 match {
           case Left(value) => (getRes._1, Left(value))
           case Right(value) => iterator(getRes._1, repos.tail, acc :+ value)

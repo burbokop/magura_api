@@ -5,6 +5,7 @@ import io.github.burbokop.magura.api.GeneratorDistributor.Generation
 import io.github.burbokop.magura.models.meta.RepositoryMetaData
 import io.github.burbokop.magura.utils.EitherUtils.ThrowableListImplicits._
 import io.github.burbokop.magura.models.meta.RepositoryMetaData
+import io.github.burbokop.magura.repository.RepositoryProvider
 
 import java.io.File
 
@@ -17,9 +18,15 @@ object GeneratorDistributor{
 
 case class GeneratorDistributor(
                             generators: Map[String, Generator],
+                            repositoryProviders: Map[String, RepositoryProvider],
                             generatorField: MaguraFile => String,
                             lastGeneration: Option[Generation] = None,
                           ) {
+
+  def repositoryProvider(providerName: String) =
+    repositoryProviders.get(providerName)
+
+
   private def proceedWithMaguraFile(
                                      cache: List[RepositoryMetaData],
                                      inputFolder: String,
@@ -35,7 +42,8 @@ case class GeneratorDistributor(
         .reducedPartitionEither
         .map({ list =>
           new GeneratorDistributor(
-            generators ++ list.map(_.modifications).reduce(_ ++ _),
+            generators ++ list.map(_.newGenerators).reduce(_ ++ _),
+            repositoryProviders ++ list.map(_.newRepositoryProviders).reduce(_ ++ _),
             generatorField,
             Some(Generation(generatorName, list.find(_.changed).isDefined))
           )
@@ -59,6 +67,4 @@ case class GeneratorDistributor(
           proceedWithMaguraFile(cache, inputFolder, outputWithOptions, maguraFile)
         })
     }
-
-  def withGenerator(name: String, generator: Generator) = GeneratorDistributor(generators ++ Map(name -> generator), generatorField)
 }

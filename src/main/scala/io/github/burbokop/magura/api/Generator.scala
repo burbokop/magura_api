@@ -2,6 +2,7 @@ package io.github.burbokop.magura.api
 
 import io.github.burbokop.magura.api.Generator.Options
 import io.github.burbokop.magura.models.meta.RepositoryMetaData
+import io.github.burbokop.magura.repository.RepositoryProvider
 import io.github.burbokop.magura.utils.ReflectUtils._
 import play.api.libs.json.{Format, JsNull, JsObject, JsResult, JsString, JsValue, Reads, Writes}
 
@@ -71,7 +72,11 @@ object Generator {
   def repositoryName(inputPath: String): String =
     new File(inputPath).getParentFile.getName
 
-  case class Result(changed: Boolean, modifications: Map[String, Generator] = Map())
+  case class Result(
+                     changed: Boolean,
+                     newGenerators: Map[String, Generator] = Map(),
+                     newRepositoryProviders: Map[String, RepositoryProvider] = Map(),
+                   )
 }
 
 trait Generator {

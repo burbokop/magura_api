@@ -29,6 +29,13 @@ class PluginLoader extends Generator {
                         outputPath: String,
                         options: Generator.Options,
                         maguraFile: MaguraFile
-                      ): Either[Throwable, Generator.Result] =
-    Right(Generator.Result(false, load(new File(inputPath)).map(_.generators()).reduce(_ ++ _)))
+                      ): Either[Throwable, Generator.Result] = {
+    val plugins = load(new File(inputPath))
+    Right(Generator.Result(
+      false,
+      plugins.map(_.generators).reduce(_ ++ _),
+      plugins.map(_.repositoryProviders).reduce(_ ++ _)
+    ))
+  }
+
 }
