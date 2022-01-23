@@ -7,4 +7,7 @@ trait Plugin {
   def name(): String
   def repositoryProviders(): Map[String, RepositoryProvider]
   def generators(): Map[String, Generator]
+  def generatorField(maguraFile: MaguraFile): String
+  final def newDistributor(): GeneratorDistributor =
+    new GeneratorDistributor(generators(), repositoryProviders(), generatorField)
 }
