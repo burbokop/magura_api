@@ -13,7 +13,7 @@ case class MaguraRepository(
                              provider: String,
                              user: String,
                              name: String,
-                             branchName: Option[String],
+                             version: Option[String],
                              builder: Option[String]
                            )
 
@@ -22,7 +22,7 @@ object MaguraRepository {
   case class UndefinedProvider(provider: String) extends Exception(s"undefined provider: $provider")
 
   def fromString(string: String): Either[Throwable, MaguraRepository] = {
-    val error = MaguraRepository.Error(s"repo should be {provider}:{user}.{repo}.{branch(optional)}:{builder(optional)} but got '$string'")
+    val error = MaguraRepository.Error(s"repo should be {provider}:{user}.{repo}.{version | commit | branch (optional)}:{builder (optional)} but got '$string'")
     val parts = string.split(':')
     if(parts.length > 1) {
       val provider = parts(0)
@@ -32,8 +32,8 @@ object MaguraRepository {
       if(repoParts.length > 1) {
         val user = repoParts(0)
         val repoName = repoParts(1)
-        val branch = if (repoParts.length == 3) Some(repoParts(2)) else None
-        Right(MaguraRepository(provider, user, repoName, branch, builder))
+        val commitOrBranch = if (repoParts.length == 3) Some(repoParts(2)) else None
+        Right(MaguraRepository(provider, user, repoName, commitOrBranch, builder))
       } else Left(error)
     } else Left(error)
   }
@@ -56,14 +56,14 @@ object MaguraRepository {
 
     val branchResult = builderDistributor.repositoryProvider(repository.provider)
       .map(repoProvider => {
-        val branchName = repository.branchName.getOrElse(repoProvider.defaultBranchName())
+        val version = repository.version.getOrElse(repoProvider.defaultBranchName())
 
-        repoProvider.branch(repository.user, repository.name, branchName).fold(
+        repoProvider.commitOrHead(repository.user, repository.name, version).fold(
           err => (builderDistributor, Left(err)),
-          branch => {
+          desiredCommit => {
             val meta = RepositoryMetaData.fromJsonFileDefault(metaFile)
-            if(meta.currentCommit != branch.commit.hash) {
-              repoProvider.download(repository.user, repository.name, branchName, repoFolder)
+            if(meta.currentCommit != desiredCommit.hash) {
+              repoProvider.download(repository.user, repository.name, version, repoFolder)
                 .fold(err => (builderDistributor, Left(err)), repoEntry => {
                   val entryFolder = genEntryFolder(repoEntry)
                   val buildPaths: Map[String, Options] =
@@ -86,7 +86,7 @@ object MaguraRepository {
                         newGeneratorDistributor.lastGeneration.map { generation =>
                           if(generation.changed) {
                             (newGeneratorDistributor, meta.withVersion(RepositoryVersion(
-                              branch.commit.hash,
+                              desiredCommit.hash,
                               repoEntry,
                               entryFolder,
                               buildPaths.lastOption.map(_._1),

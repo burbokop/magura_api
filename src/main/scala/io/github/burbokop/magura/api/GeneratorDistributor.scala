@@ -42,10 +42,10 @@ case class GeneratorDistributor(
         .reducedPartitionEither
         .map({ list =>
           new GeneratorDistributor(
-            generators ++ list.map(_.newGenerators).reduce(_ ++ _),
-            repositoryProviders ++ list.map(_.newRepositoryProviders).reduce(_ ++ _),
+            generators ++ list.map(_.newGenerators).reduceOption(_ ++ _).getOrElse(Map()),
+            repositoryProviders ++ list.map(_.newRepositoryProviders).reduceOption(_ ++ _).getOrElse(Map()),
             generatorField,
-            Some(Generation(generatorName, list.find(_.changed).isDefined))
+            Some(Generation(generatorName, list.exists(_.changed)))
           )
         })
     } getOrElse {
