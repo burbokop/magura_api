@@ -1,10 +1,24 @@
 package io.github.burbokop.magura.utils
 
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe
+import scala.reflect.runtime.{currentMirror, universe}
 
 object ReflectUtils {
+  def findObjectAsTrait[T](classPath: String): Either[Throwable, T] =
+    try {
+      Right(
+        universe
+          .runtimeMirror(getClass.getClassLoader)
+          .reflectModule(currentMirror.staticModule(classPath))
+          .instance
+          .asInstanceOf[T]
+      )
+    } catch {
+      case err: Throwable => Left(err)
+    }
+
   implicit class MirrorImplicits(mirror: universe.Mirror) {
+
     def instanceType[T: ClassTag](instance: T): universe.Type =
       mirror.reflect(instance).symbol.toType
 
@@ -34,17 +48,17 @@ object ReflectUtils {
     }
 
     def findAnnotationMethod(`class`: String, argType: universe.Type, resType: universe.Type): Option[universe.Tree] = {
-      //println("A0")
+      println("A0")
       var result: Option[universe.Tree] = None
       annotations(`class`).find(annotation => {
-        //println(s"\tA1: $annotation")
+        println(s"\tA1: $annotation")
         annotation.tree.children.find(child => {
-          //println(s"\t\tA2: $child -> ${Option(child.symbol).map(_.isMethod)}")
+          println(s"\t\tA2: $child -> ${Option(child.symbol).map(_.isMethod)}")
           child.children.find(childOfChild => {
-            //println(s"\t\t\tA3: $childOfChild")
+            println(s"\t\t\tA3: $childOfChild")
             if (Option(childOfChild.symbol).exists(_.isMethod)) {
               val method = childOfChild.symbol.asMethod
-              //println(s"\t\t\tA4: $method")
+              println(s"\t\t\tA4: $method")
               if (method.paramLists.exists(paramList => paramList.length == 1 && paramList.head.typeSignature <:< argType) && method.typeSignature.resultType <:< resType) {
                 result = Some(childOfChild)
                 true

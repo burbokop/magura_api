@@ -11,6 +11,8 @@ import java.io.{File, FileInputStream, FileOutputStream, InputStream}
 object RepositoryMetaData {
   implicit val jsonFormat = Json.format[RepositoryMetaData]
 
+  val empty = RepositoryMetaData("", Nil)
+
   def fromFolder(f: File, name: String, maxLevel: Int = Int.MaxValue): List[RepositoryMetaData] =
     FileUtils.recursiveListFiles(f, maxLevel).filter(item => item.isFile && item.getName == name).map { item =>
       fromJsonFile(item).toOption
@@ -35,11 +37,19 @@ object RepositoryMetaData {
   def fromJsonFile(file: File): Either[Throwable, RepositoryMetaData] =
     fromJsonFile(file.getPath)
 
-  def fromJsonFileDefault(path: String): RepositoryMetaData =
+  /**
+   * @param path
+   * @param default
+   * @return default if file not found. else either
+   */
+  def fromJsonFileDefault(path: String, default: RepositoryMetaData = empty): Either[Throwable, RepositoryMetaData] =
     fromJsonFile(path)
-      .fold[RepositoryMetaData](_ => RepositoryMetaData("", List()), d => d)
+      .fold[Either[Throwable, RepositoryMetaData]]({
+        case _: java.io.FileNotFoundException => Right(default)
+        case other => Left(other)
+      }, Right(_))
 
-  def fromJsonFileDefault(file: File): RepositoryMetaData =
+  def fromJsonFileDefault(file: File): Either[Throwable, RepositoryMetaData] =
     fromJsonFileDefault(file.getPath)
 
 }

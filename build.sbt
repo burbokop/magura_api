@@ -5,7 +5,7 @@ import scala.io.Source
 
 name := "magura_api"
 
-version := "0.1.9"
+version := "0.1.10"
 
 scalaVersion := "2.12.2"
 

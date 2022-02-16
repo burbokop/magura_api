@@ -61,47 +61,53 @@ object MaguraRepository {
         repoProvider.commitOrHead(repository.user, repository.name, version).fold(
           err => (builderDistributor, Left(err)),
           desiredCommit => {
-            val meta = RepositoryMetaData.fromJsonFileDefault(metaFile)
-            if(meta.currentCommit != desiredCommit.hash) {
-              repoProvider.download(repository.user, repository.name, version, repoFolder)
-                .fold(err => (builderDistributor, Left(err)), repoEntry => {
-                  val entryFolder = genEntryFolder(repoEntry)
-                  val buildPaths: Map[String, Options] =
-                    optionsSet.map(options => (genBuildFolder(repoEntry, options), options)).toMap
+            println(s"${Console.RED_B}desiredCommit: ${desiredCommit}${Console.RESET}")
+            println(s"${Console.RED_B}metaFile: $metaFile${Console.RESET}")
+            RepositoryMetaData.fromJsonFileDefault(metaFile).fold(err => (builderDistributor, Left(err)), meta => {
+              println(s"${Console.RED_B}meta: $meta${Console.RESET}")
+              println(s"${Console.RED_B}currentCommit: ${meta.currentCommit}${Console.RESET}")
+              if(meta.currentCommit != desiredCommit.hash) {
+                println(s"${Console.RED_B}need download new version${Console.RESET}")
+                repoProvider.download(repository.user, repository.name, desiredCommit.hash, repoFolder)
+                  .fold(err => (builderDistributor, Left(err)), repoEntry => {
+                    val entryFolder = genEntryFolder(repoEntry)
+                    val buildPaths: Map[String, Options] =
+                      optionsSet.map(options => (genBuildFolder(repoEntry, options), options)).toMap
 
-                  println(s"optionsSet: $optionsSet")
-                  println(s"entryFolder: $entryFolder")
-                  println(s"buildPaths: $buildPaths")
+                    println(s"optionsSet: $optionsSet")
+                    println(s"entryFolder: $entryFolder")
+                    println(s"buildPaths: $buildPaths")
 
-                  builderDistributor
-                    .proceed(
-                      RepositoryMetaData.fromFolder(new File(cacheFolder), metaFileName, 3),
-                      entryFolder,
-                      buildPaths,
-                      repository.builder.map(MaguraFile.fromBuilder)
-                    )
-                    .fold[(GeneratorDistributor, Either[Throwable, RepositoryMetaData])](
-                      err => (builderDistributor, Left(err)),
-                      newGeneratorDistributor => {
-                        newGeneratorDistributor.lastGeneration.map { generation =>
-                          if(generation.changed) {
-                            (newGeneratorDistributor, meta.withVersion(RepositoryVersion(
-                              desiredCommit.hash,
-                              repoEntry,
-                              entryFolder,
-                              buildPaths.lastOption.map(_._1),
-                              buildPaths,
-                              generation.generatorName
-                            )).writeJsonToFile(metaFile, pretty = true))
-                          } else {
-                            (newGeneratorDistributor, Right(meta))
+                    builderDistributor
+                      .proceed(
+                        RepositoryMetaData.fromFolder(new File(cacheFolder), metaFileName, 3),
+                        entryFolder,
+                        buildPaths,
+                        repository.builder.map(MaguraFile.fromBuilder)
+                      )
+                      .fold[(GeneratorDistributor, Either[Throwable, RepositoryMetaData])](
+                        err => (builderDistributor, Left(err)),
+                        newGeneratorDistributor => {
+                          newGeneratorDistributor.lastGeneration.map { generation =>
+                            if(generation.changed) {
+                              (newGeneratorDistributor, meta.withVersion(RepositoryVersion(
+                                desiredCommit.hash,
+                                repoEntry,
+                                entryFolder,
+                                buildPaths.lastOption.map(_._1),
+                                buildPaths,
+                                generation.generatorName
+                              )).writeJsonToFile(metaFile, pretty = true))
+                            } else {
+                              (newGeneratorDistributor, Right(meta))
+                            }
+                          } getOrElse {
+                            (builderDistributor, Right(meta))
                           }
-                        } getOrElse {
-                          (builderDistributor, Right(meta))
-                        }
-                      })
-                })
-            } else (builderDistributor, Right(meta))
+                        })
+                  })
+              } else (builderDistributor, Right(meta))
+            })
           })
       }).getOrElse((builderDistributor, Left(UndefinedProvider(repository.provider))))
 
